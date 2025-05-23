@@ -3,22 +3,26 @@ import snap7
 import time
 import math
 import snap7.util
+from bitarray.util import int2ba
 
-class PLC2PC: #DB2
-    idDB = 2
-    startInsp = False           #bool 0.0 / 1 bit
-    pulleyID = -1               #word 2.0 / 2 bytes 
+
+ID_DB_PC_2_PLC = 1
+ID_DB_PLC_2_PC = 2
+
+class PLC2PC:
+    StartInspection = False     #bool 0.0 / 1 bit
 _plc2pc = PLC2PC()
 
-class PC2PLC: #DB3
-    idDB = 3
+class PC2PLC:
     CVInspectionFinish = False  #bool 0.0 / 1 bit
-    CVInspectionOK = True       #bool 0.1 / 1 bit
+    CVInspectionOK = False      #bool 0.1 / 1 bit
+    IAInspectionFinish = False  #bool 0.2 / 1 bit
+    IAInspectionOK = False      #bool 0.3 / 1 bit
 _pc2plc = PC2PLC()
 
 
 #PLC configuration
-ip = "192.168.0.2"
+ip = "192.168.0.1"
 rack = 0
 slot = 0
 port = 102 #default value
@@ -34,8 +38,6 @@ def readBoolean(clienthandle:snap7.client.Client,db,startbyte,numbytes,byteaddre
     boolout = snap7.util.get_bool(data,byteaddress,bitaddress)
     print(boolout)
 
-ID_DB_PLC_2_PC = 1
-ID_DB_PC_2_PLC = 3
 
 #Connect to the PLC
 try:
@@ -44,29 +46,35 @@ except RuntimeError:
     #Capture the exception
     list = ["No connection"]
 else:
-    dataWrite = client.db_read(ID_DB_PC_2_PLC,0,8)
+    dataWrite = client.db_read(ID_DB_PC_2_PLC,0,1)
+    counter = 0
     while stopRunning == False:
         try:
-            #Read
-            # data = client.db_read(ID_DB_PLC_2_PC,0,8)
-            # databool = snap7.util.get_bool(data,0,0)
-            # dataInt = snap7.util.get_int(data,2)
-            # dataReal = snap7.util.get_real(data,4)
-            # print (f'dataBool: {databool}')
-            # print (f'dataInt: {dataInt}')
-            # print (f'dataReal: {dataReal}')
+            print(snap7.util.get_bool(dataWrite,0,0))
+            client.db_read(ID_DB_PLC_2_PC,0,1)
+            dataPLC2PC = client.db_read(ID_DB_PLC_2_PC,0,1)
+            _plc2pc.StartInspection = snap7.util.get_bool(dataPLC2PC,0,0)
+            print (f'_plc2pc.StartInspection: {_plc2pc.StartInspection}')
+
+            bitarr = int2ba(counter,4)
+            print(f'counter: {counter},   {bitarr}')
+            _pc2plc.CVInspectionFinish=int(bitarr[0])
+            _pc2plc.CVInspectionOK=int(bitarr[1])
+            _pc2plc.IAInspectionFinish=int(bitarr[2])
+            _pc2plc.IAInspectionOK=int(bitarr[3])
 
             #Write
-            # databool = True
-            # dataInt = 3
-            # dataReal = float(math.pi)
-            # dataWrite = snap7.util.set_real(dataWrite,4,dataReal)
-            # data = client.db_write(ID_DB_PC_2_PLC,0,dataWrite)
-            # dataWrite = client.db_read(ID_DB_PC_2_PLC,0,8)
-            # dataReal = snap7.util.get_real(dataWrite,4)
-            # print (f'dataReal: {dataReal}')
+            dataWrite = snap7.util.set_bool(dataWrite,0,0,_pc2plc.CVInspectionFinish)
+            dataWrite = snap7.util.set_bool(dataWrite,0,1,_pc2plc.CVInspectionOK)
+            dataWrite = snap7.util.set_bool(dataWrite,0,2,_pc2plc.IAInspectionFinish)
+            dataWrite = snap7.util.set_bool(dataWrite,0,3,_pc2plc.IAInspectionOK)
+            data = client.db_write(ID_DB_PC_2_PLC,0,dataWrite)
 
-
+            
         except Exception as e:
             print(f'Error {e}')
+
+        counter+=1
+        counter = counter%16
         time.sleep(1)
+        # break
